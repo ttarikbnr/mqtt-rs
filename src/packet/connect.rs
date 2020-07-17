@@ -117,6 +117,10 @@ impl ConnectPacket {
         self.payload.password.as_ref().map(|x| &x[..])
     }
 
+    pub fn keep_alive(&self) -> u16 {
+        self.keep_alive.0
+    }
+
     pub fn will(&self) -> Option<(&str, &Vec<u8>)> {
         self.payload
             .will_topic
