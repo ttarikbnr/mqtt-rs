@@ -37,7 +37,8 @@ fn main() {
                 .takes_value(true)
                 .required(true)
                 .help("MQTT server address (host:port)"),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("SUBSCRIBE")
                 .short("s")
                 .long("subscribe")
@@ -45,25 +46,29 @@ fn main() {
                 .multiple(true)
                 .required(true)
                 .help("Channel filter to subscribe"),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("USER_NAME")
                 .short("u")
                 .long("username")
                 .takes_value(true)
                 .help("Login user name"),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("PASSWORD")
                 .short("p")
                 .long("password")
                 .takes_value(true)
                 .help("Password"),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("CLIENT_ID")
                 .short("i")
                 .long("client-identifier")
                 .takes_value(true)
                 .help("Client identifier"),
-        ).get_matches();
+        )
+        .get_matches();
 
     let server_addr = matches.value_of("SERVER").unwrap();
     let client_id = matches
@@ -81,7 +86,7 @@ fn main() {
     info!("Connected!");
 
     info!("Client identifier {:?}", client_id);
-    let mut conn = ConnectPacket::new("MQTT", client_id);
+    let mut conn = ConnectPacket::new(client_id);
     conn.set_clean_session(true);
     let mut buf = Vec::new();
     conn.encode(&mut buf).unwrap();

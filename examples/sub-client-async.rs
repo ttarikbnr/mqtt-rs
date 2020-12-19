@@ -26,10 +26,7 @@ fn generate_client_id() -> String {
 #[tokio::main]
 async fn main() {
     // configure logging
-    env::set_var(
-        "RUST_LOG",
-        env::var_os("RUST_LOG").unwrap_or_else(|| "info".into()),
-    );
+    env::set_var("RUST_LOG", env::var_os("RUST_LOG").unwrap_or_else(|| "info".into()));
     env_logger::init();
 
     let matches = App::new("sub-client")
@@ -82,12 +79,7 @@ async fn main() {
     let channel_filters: Vec<(TopicFilter, QualityOfService)> = matches
         .values_of("SUBSCRIBE")
         .unwrap()
-        .map(|c| {
-            (
-                TopicFilter::new(c.to_string()).unwrap(),
-                QualityOfService::Level0,
-            )
-        })
+        .map(|c| (TopicFilter::new(c.to_string()).unwrap(), QualityOfService::Level0))
         .collect();
 
     let keep_alive = 10;
@@ -97,7 +89,7 @@ async fn main() {
     info!("Connected!");
 
     info!("Client identifier {:?}", client_id);
-    let mut conn = ConnectPacket::new("MQTT", client_id);
+    let mut conn = ConnectPacket::new(client_id);
     conn.set_clean_session(true);
     conn.set_keep_alive(keep_alive);
     let mut buf = Vec::new();
@@ -149,7 +141,7 @@ async fn main() {
     let mut ping_stream = tokio::time::interval(ping_time);
 
     let ping_sender = async move {
-        while let Some(_) = ping_stream.next().await {
+        while ping_stream.next().await.is_some() {
             info!("Sending PINGREQ to broker");
 
             let pingreq_packet = PingreqPacket::new();

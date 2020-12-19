@@ -64,10 +64,7 @@ pub trait Packet: Sized {
     /// Length of bytes after encoding variable header
     fn encoded_variable_headers_length(&self) -> u32;
     /// Deocde packet with a `FixedHeader`
-    fn decode_packet<R: Read>(
-        reader: &mut R,
-        fixed_header: FixedHeader,
-    ) -> Result<Self, PacketError<Self>>;
+    fn decode_packet<R: Read>(reader: &mut R, fixed_header: FixedHeader) -> Result<Self, PacketError<Self>>;
 }
 
 impl<T: Packet + fmt::Debug + 'static> Encodable for T {
@@ -77,9 +74,7 @@ impl<T: Packet + fmt::Debug + 'static> Encodable for T {
         self.fixed_header().encode(writer)?;
         self.encode_variable_headers(writer)?;
 
-        self.payload_ref()
-            .encode(writer)
-            .map_err(PacketError::PayloadError)
+        self.payload_ref().encode(writer).map_err(PacketError::PayloadError)
     }
 
     fn encoded_length(&self) -> u32 {
@@ -93,10 +88,7 @@ impl<T: Packet + fmt::Debug + 'static> Decodable for T {
     type Err = PacketError<T>;
     type Cond = FixedHeader;
 
-    fn decode_with<R: Read>(
-        reader: &mut R,
-        fixed_header: Option<FixedHeader>,
-    ) -> Result<Self, PacketError<Self>> {
+    fn decode_with<R: Read>(reader: &mut R, fixed_header: Option<FixedHeader>) -> Result<Self, PacketError<Self>> {
         let fixed_header: FixedHeader = if let Some(hdr) = fixed_header {
             hdr
         } else {
@@ -430,7 +422,7 @@ mod test {
 
     #[test]
     fn test_variable_packet_basic() {
-        let packet = ConnectPacket::new("MQTT".to_owned(), "1234".to_owned());
+        let packet = ConnectPacket::new("1234".to_owned());
 
         // Wrap it
         let var_packet = VariablePacket::new(packet);
@@ -449,7 +441,7 @@ mod test {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn test_variable_packet_async_parse() {
-        let packet = ConnectPacket::new("MQTT".to_owned(), "1234".to_owned());
+        let packet = ConnectPacket::new("1234".to_owned());
 
         // Wrap it
         let var_packet = VariablePacket::new(packet);
@@ -468,7 +460,7 @@ mod test {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn test_variable_packet_async_peek() {
-        let packet = ConnectPacket::new("MQTT".to_owned(), "1234".to_owned());
+        let packet = ConnectPacket::new("1234".to_owned());
 
         // Wrap it
         let var_packet = VariablePacket::new(packet);
@@ -485,8 +477,7 @@ mod test {
 
         // Read the rest
         let mut async_buf = buf.as_slice();
-        let (peeked_buffer, peeked_packet) =
-            VariablePacket::peek_finalize(&mut async_buf).await.unwrap();
+        let (peeked_buffer, peeked_packet) = VariablePacket::peek_finalize(&mut async_buf).await.unwrap();
 
         assert_eq!(peeked_buffer, buf);
         assert_eq!(peeked_packet, var_packet);

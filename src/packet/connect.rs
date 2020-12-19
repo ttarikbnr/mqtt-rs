@@ -5,7 +5,7 @@ use std::fmt;
 use std::io::{self, Read, Write};
 
 use crate::control::variable_header::protocol_level::SPEC_3_1_1;
-use crate::control::variable_header::{ConnectFlags, KeepAlive, ProtocolLevel, ProtocolName};
+use crate::control::variable_header::{ConnectFlags, KeepAlive, ProtocolLevel, ProtocolName, VariableHeaderError};
 use crate::control::{ControlType, FixedHeader, PacketType};
 use crate::encodable::{StringEncodeError, VarBytes};
 use crate::packet::{Packet, PacketError};
@@ -26,23 +26,23 @@ pub struct ConnectPacket {
 }
 
 impl ConnectPacket {
-    pub fn new<P, C>(protoname: P, client_identifier: C) -> ConnectPacket
+    pub fn new<C>(client_identifier: C) -> ConnectPacket
     where
-        P: Into<String>,
         C: Into<String>,
     {
-        ConnectPacket::with_level(protoname, client_identifier, SPEC_3_1_1)
+        ConnectPacket::with_level("MQTT", client_identifier, SPEC_3_1_1).expect("SPEC_3_1_1 should always be valid")
     }
 
-    pub fn with_level<P, C>(protoname: P, client_identifier: C, level: u8) -> ConnectPacket
+    pub fn with_level<P, C>(protoname: P, client_identifier: C, level: u8) -> Result<ConnectPacket, VariableHeaderError>
     where
         P: Into<String>,
         C: Into<String>,
     {
+        let protocol_level = ProtocolLevel::from_u8(level).ok_or(VariableHeaderError::InvalidProtocolVersion)?;
         let mut pk = ConnectPacket {
             fixed_header: FixedHeader::new(PacketType::with_default(ControlType::Connect), 0),
             protocol_name: ProtocolName(protoname.into()),
-            protocol_level: ProtocolLevel(level),
+            protocol_level,
             flags: ConnectFlags::empty(),
             keep_alive: KeepAlive(0),
             payload: ConnectPacketPayload::new(client_identifier.into()),
@@ -50,7 +50,7 @@ impl ConnectPacket {
 
         pk.fixed_header.remaining_length = pk.calculate_remaining_length();
 
-        pk
+        Ok(pk)
     }
 
     #[inline]
@@ -126,12 +126,7 @@ impl ConnectPacket {
             .will_topic
             .as_ref()
             .map(|x| &x[..])
-            .and_then(|topic| {
-                self.payload
-                    .will_message
-                    .as_ref()
-                    .map(|msg| (topic, &msg.0))
-            })
+            .and_then(|topic| self.payload.will_message.as_ref().map(|msg| (topic, &msg.0)))
     }
 
     pub fn will_retain(&self) -> bool {
@@ -146,8 +141,22 @@ impl ConnectPacket {
         &self.payload.client_identifier[..]
     }
 
+    pub fn protocol_name(&self) -> &str {
+        &self.protocol_name.0
+    }
+
+    pub fn protocol_level(&self) -> ProtocolLevel {
+        self.protocol_level
+    }
+
     pub fn clean_session(&self) -> bool {
         self.flags.clean_session
+    }
+
+    /// Read back the "reserved" Connect flag bit 0. For compliant implementations this should
+    /// always be false.
+    pub fn reserved_flag(&self) -> bool {
+        self.flags.reserved
     }
 }
 
@@ -182,10 +191,7 @@ impl Packet for ConnectPacket {
             + self.keep_alive.encoded_length()
     }
 
-    fn decode_packet<R: Read>(
-        reader: &mut R,
-        fixed_header: FixedHeader,
-    ) -> Result<Self, PacketError<Self>> {
+    fn decode_packet<R: Read>(reader: &mut R, fixed_header: FixedHeader) -> Result<Self, PacketError<Self>> {
         let protoname: ProtocolName = Decodable::decode(reader)?;
         let protocol_level: ProtocolLevel = Decodable::decode(reader)?;
         let flags: ConnectFlags = Decodable::decode(reader)?;
@@ -253,26 +259,10 @@ impl Encodable for ConnectPacketPayload {
 
     fn encoded_length(&self) -> u32 {
         self.client_identifier.encoded_length()
-            + self
-                .will_topic
-                .as_ref()
-                .map(|t| t.encoded_length())
-                .unwrap_or(0)
-            + self
-                .will_message
-                .as_ref()
-                .map(|t| t.encoded_length())
-                .unwrap_or(0)
-            + self
-                .user_name
-                .as_ref()
-                .map(|t| t.encoded_length())
-                .unwrap_or(0)
-            + self
-                .password
-                .as_ref()
-                .map(|t| t.encoded_length())
-                .unwrap_or(0)
+            + self.will_topic.as_ref().map(|t| t.encoded_length()).unwrap_or(0)
+            + self.will_message.as_ref().map(|t| t.encoded_length()).unwrap_or(0)
+            + self.user_name.as_ref().map(|t| t.encoded_length()).unwrap_or(0)
+            + self.password.as_ref().map(|t| t.encoded_length()).unwrap_or(0)
     }
 }
 
@@ -383,7 +373,7 @@ mod test {
 
     #[test]
     fn test_connect_packet_encode_basic() {
-        let packet = ConnectPacket::new("MQTT".to_owned(), "12345".to_owned());
+        let packet = ConnectPacket::new("12345".to_owned());
         let expected = b"\x10\x11\x00\x04MQTT\x04\x00\x00\x00\x00\x0512345";
 
         let mut buf = Vec::new();
@@ -399,13 +389,13 @@ mod test {
         let mut buf = Cursor::new(&encoded_data[..]);
         let packet = ConnectPacket::decode(&mut buf).unwrap();
 
-        let expected = ConnectPacket::new("MQTT".to_owned(), "12345".to_owned());
+        let expected = ConnectPacket::new("12345".to_owned());
         assert_eq!(expected, packet);
     }
 
     #[test]
     fn test_connect_packet_user_name() {
-        let mut packet = ConnectPacket::new("MQTT".to_owned(), "12345".to_owned());
+        let mut packet = ConnectPacket::new("12345".to_owned());
         packet.set_user_name(Some("mqtt_player".to_owned()));
 
         let mut buf = Vec::new();
